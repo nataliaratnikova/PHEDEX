@@ -14,8 +14,6 @@ pending...
 
 =head1 METHODS
 
-=over
-
 =cut
 
 
@@ -59,6 +57,8 @@ sub AUTOLOAD
 
 
 =pod
+
+=over
 
 =item expandRequest($self, $dbs, $data, %opts)
 
@@ -183,6 +183,35 @@ sub validateGroup
     return $group_id;
 }
 
+=pod
+
+=item validateRequest($self, $data, $nodes, %args)
+
+Checks request parameters according to the request type and data format. 
+Returns validated parameters that can be passed directly to createRequest. 
+TODO: document data formats. 
+
+=over 
+
+=item *
+
+C<$data>  is a  hash reference, where $data->{FORMAT} must match one of the supported 
+formats:  'lfns', 'tree', 'flat', or 'existingrequestdata' as returned by 
+getExistingRequestData, e.g. in UpdateRequest API, and $data->{DBS} is required but not used 
+(a legacy feature?)
+    
+=item *
+
+C<$nodes>  is an  array reference with a list of node names
+
+=item *
+
+C<%args> is a hash used to pass other required parameters: TYPE, CLIENT_ID.
+
+=back
+
+=cut
+
 sub validateRequest
 {
     my ($self, $data, $nodes, %h) = @_;
@@ -198,6 +227,10 @@ sub validateRequest
 	@typereq = qw( PRIORITY USER_GROUP IS_MOVE IS_STATIC IS_TRANSIENT IS_DISTRIBUTED IS_CUSTODIAL); 
     } elsif ( $h{TYPE} eq 'delete' ) {
 	@typereq = qw( RM_SUBSCRIPTIONS );
+    } elsif ( $h{TYPE} eq 'invalidate' ) {
+	# If needed, pass additional parameters here:
+	@typereq = ();
+	#@typereq = qw( INV_REPLICAS );
     } else {
 	die "type '$h{TYPE}' is not valid\n";
     }
@@ -217,6 +250,12 @@ sub validateRequest
 	die "cannot create request: Time-based deletion requests are not allowed\n";
     }
 
+    # By analogy with the previous two checks, enable if needed
+    # (do we ever want a delayed invalidation/re-transfer?): 
+    #if ($type eq 'invalidate' && $h{TIME_START}) {
+	#die "cannot create request: Time-based invalidation requests are not allowed\n";
+    #}
+
     # Part 0: validate groups
     if ($type eq 'xfer') {
 	die "cannot create request: USER_GROUP $h{USER_GROUP} not found\n"
@@ -229,7 +268,9 @@ sub validateRequest
 
     my ($ds_ids, $b_ids);
 
-    if ($dataformat eq 'tree') { # heirachical representation (user XML)
+    if ($dataformat eq 'lfns') { # user supplied list of LFNs  
+	print "NRDEVEL  TODO: implement processing of the LFNs list\n";
+    } elsif ($dataformat eq 'tree') { # heirachical representation (user XML)
 	# resolve the DBS
 	my $dbs = $data->{NAME};
 	my $db_dbs = &getDbsFromName($self, $dbs);
@@ -284,6 +325,7 @@ sub validateRequest
     } elsif ($dataformat eq 'flat') { # flat data representation (user text)
 	# resolve the dbs
 	my $dbs = $data->{DBS};
+
 	my $db_dbs = &getDbsFromName($self, $dbs);
 	if (! $db_dbs->{ID} ) {
 	    die "dbs '$dbs' does not exist\n";
@@ -424,16 +466,16 @@ sub validateRequest
 
 =pod
 
-=item createRequest($self, $data, $nodes, %args)
+=item createRequest($self, $ds_ids, $b_ids, $node_pairs, %h)
 
-Creates a new request, returns the newly created request id.
-
-TODO:  document format for $data and $nodes hash.
+Takes arguments returned by validateRequest. Creates a new request.
+Returns the newly created request id.
 
 =cut
 
 sub createRequest
 {
+    #my ($self, $ds_ids, $b_ids, $f_ids, $node_pairs, %h) = @_;
     my ($self, $ds_ids, $b_ids, $node_pairs, %h) = @_;
 
     my $now = $h{NOW} || &mytimeofday();
@@ -519,10 +561,11 @@ sub createRequest
 
 =back
 
-=head1 SEE ALSO...
+=head1 SEE ALSO
 
-L<PHEDEX::Core::SQL|PHEDEX::Core::SQL>,
+L<PHEDEX::Core::SQL|PHEDEX::Core::SQL>
 
 =cut
 
 1;
+
